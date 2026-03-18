@@ -158,3 +158,116 @@ export const generateLoanReceipt = (loan: any) => {
   
   doc.save(`Receipt_${loan.loan_number}.pdf`);
 };
+
+export const generatePaymentReceipt = (payment: any, settings: any) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  
+  // Header with Logo
+  if (settings?.logo) {
+    try {
+      doc.addImage(settings.logo, 'PNG', 14, 10, 30, 30);
+    } catch (e) {
+      console.error('Error adding logo to PDF:', e);
+    }
+  }
+  
+  // Business Info
+  doc.setFontSize(20);
+  doc.setTextColor(44, 90, 160);
+  doc.setFont('helvetica', 'bold');
+  doc.text(settings?.branchName || 'Girvi Loan Management', 50, 20);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.setFont('helvetica', 'normal');
+  doc.text(settings?.branchAddress || '', 50, 27, { maxWidth: 140 });
+  doc.text(`Phone: ${settings?.contactNumber || ''}`, 50, 37);
+  
+  doc.setDrawColor(200);
+  doc.line(14, 45, 196, 45);
+  
+  // Receipt Title
+  doc.setFontSize(16);
+  doc.setTextColor(44, 90, 160);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PAYMENT RECEIPT', 105, 55, { align: 'center' });
+  
+  // Payment Info Grid
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'normal');
+  
+  const leftCol = 14;
+  const rightCol = 110;
+  let currentY = 70;
+  
+  // Row 1
+  doc.setFont('helvetica', 'bold');
+  doc.text('Receipt No:', leftCol, currentY);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`PAY-${payment.id}`, leftCol + 25, currentY);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.text('Date:', rightCol, currentY);
+  doc.setFont('helvetica', 'normal');
+  doc.text(format(new Date(payment.payment_date || payment.created_at), 'dd MMM yyyy'), rightCol + 25, currentY);
+  
+  currentY += 10;
+  
+  // Row 2
+  doc.setFont('helvetica', 'bold');
+  doc.text('Loan No:', leftCol, currentY);
+  doc.setFont('helvetica', 'normal');
+  doc.text(payment.loan_number || 'N/A', leftCol + 25, currentY);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.text('Customer ID:', rightCol, currentY);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`CUST-${payment.loans?.customer_id || payment.customer_id || 'N/A'}`, rightCol + 25, currentY);
+  
+  currentY += 10;
+  
+  // Row 3
+  doc.setFont('helvetica', 'bold');
+  doc.text('Customer:', leftCol, currentY);
+  doc.setFont('helvetica', 'normal');
+  doc.text(payment.customer_name || 'N/A', leftCol + 25, currentY);
+  
+  currentY += 15;
+  
+  // Payment Details Table
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Description', 'Details']],
+    body: [
+      ['Payment Type', (payment.payment_type || 'Payment').toUpperCase()],
+      ['Payment Mode', payment.payment_mode || 'N/A'],
+      ['Transaction ID', payment.transaction_id || 'N/A'],
+      ['Amount Paid', `INR ${Number(payment.amount).toLocaleString()}`],
+      ['Remarks', payment.remarks || '-'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [44, 90, 160], textColor: 255 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { cellWidth: 'auto' }
+    }
+  });
+  
+  currentY = (doc as any).lastAutoTable.finalY + 30;
+  
+  // Signature Section
+  doc.line(20, currentY, 70, currentY);
+  doc.text('Customer Signature', 25, currentY + 5);
+  
+  doc.line(140, currentY, 190, currentY);
+  doc.text('Authorized Signatory', 145, currentY + 5);
+  
+  // Footer
+  doc.setFontSize(9);
+  doc.setTextColor(150);
+  doc.text('Thank you for your payment!', 105, 280, { align: 'center' });
+  
+  doc.save(`Payment_Receipt_${payment.loan_number}_${format(new Date(), 'ddMMyy')}.pdf`);
+};

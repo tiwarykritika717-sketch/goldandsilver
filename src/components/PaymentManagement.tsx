@@ -9,12 +9,14 @@ import {
   Filter,
   CheckCircle2,
   X,
-  TrendingUp
+  TrendingUp,
+  Printer
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { generatePaymentReceipt } from '../lib/exportUtils';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -35,6 +37,7 @@ export default function PaymentManagement() {
   const [paymentMode, setPaymentMode] = React.useState('Cash');
   const [transactionId, setTransactionId] = React.useState('');
   const [isDuplicateTx, setIsDuplicateTx] = React.useState(false);
+  const [settings, setSettings] = React.useState<any>(null);
 
   const fetchPayments = async () => {
     setIsLoadingPayments(true);
@@ -43,7 +46,7 @@ export default function PaymentManagement() {
       console.log('Fetching payments from database...');
       const { data, error } = await supabase
         .from('payments')
-        .select('*, loans(loan_number, customers(full_name))')
+        .select('*, loans(loan_number, customer_id, customers(full_name))')
         .order('payment_date', { ascending: false });
       
       if (error) {
@@ -58,6 +61,7 @@ export default function PaymentManagement() {
         ...p, 
         loan_number: p.loans?.loan_number || 'N/A', 
         customer_name: p.loans?.customers?.full_name || 'Unknown',
+        customer_id: p.loans?.customer_id,
         date: p.payment_date,
         mode: p.payment_mode,
         type: p.payment_type
@@ -86,6 +90,17 @@ export default function PaymentManagement() {
           console.log(`Found ${loansData?.length || 0} active loans.`);
           setLoans(loansData?.map(l => ({ ...l, customer_name: l.customers?.full_name })) || []);
         }
+
+        // Fetch Settings
+        const { data: settingsData } = await supabase.from('settings').select('*');
+        if (settingsData) {
+          const settingsObj = settingsData.reduce((acc: any, curr: any) => {
+            acc[curr.key] = curr.value;
+            return acc;
+          }, {});
+          setSettings(settingsObj);
+        }
+
         fetchPayments();
       } catch (err) {
         console.error('Error fetching initial data:', err);
@@ -211,9 +226,18 @@ export default function PaymentManagement() {
                       <p className="text-[10px] text-gray-400 italic">{p.customer_name}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-emerald-600">+ ₹{p.amount.toLocaleString()}</p>
-                    <p className="text-[10px] text-gray-400">Ref: {p.transaction_id || `PAY-${p.id}`}</p>
+                  <div className="text-right flex items-center gap-4">
+                    <div>
+                      <p className="font-bold text-emerald-600">+ ₹{p.amount.toLocaleString()}</p>
+                      <p className="text-[10px] text-gray-400">Ref: {p.transaction_id || `PAY-${p.id}`}</p>
+                    </div>
+                    <button 
+                      onClick={() => generatePaymentReceipt(p, settings)}
+                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-primary transition-all"
+                      title="Print Receipt"
+                    >
+                      <Printer size={16} />
+                    </button>
                   </div>
                 </div>
               ))
@@ -380,6 +404,19 @@ export default function PaymentManagement() {
                 }
 
                 alert('Payment recorded successfully!');
+                
+                // Offer to print receipt
+                if (confirm('Would you like to download the payment receipt?')) {
+                  const newPayment = {
+                    ...paymentData,
+                    id: insertData?.[0]?.id,
+                    loan_number: loans.find(l => l.id === Number(loanId))?.loan_number,
+                    customer_name: loans.find(l => l.id === Number(loanId))?.customer_name,
+                    customer_id: loans.find(l => l.id === Number(loanId))?.customer_id
+                  };
+                  generatePaymentReceipt(newPayment, settings);
+                }
+
                 setIsPaymentModalOpen(false);
                 fetchPayments();
               } catch (err: any) {
